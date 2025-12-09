@@ -1,0 +1,178 @@
+@Configuration
+public class WebClientConfig {
+
+    @Bean
+    public WebClient webClient(WebClient.Builder builder) {
+        return builder
+                .baseUrl("https://jsonplaceholder.typicode.com")
+                .build();
+    }
+}
+
+
+@Service
+public class WebClientApiService {
+
+    @Autowired
+    private WebClient webClient;
+
+    public Mono<PostResponse> getPost(Integer id) {
+
+        return webClient.get()
+                .uri("/posts/{id}", id)
+                .header("Accept", "application/json")
+                .retrieve()
+                .bodyToMono(PostResponse.class);
+    }
+
+    public Mono<PostResponse> createPost(PostRequest req) {
+
+    return webClient.post()
+            .uri("/posts")
+            .header("Content-Type", "application/json")
+            .bodyValue(req)
+            .retrieve()
+            .bodyToMono(PostResponse.class);
+    }
+}
+
+
+
+// Webclient Crud Services
+
+@Service
+public class ProductApiClient {
+
+    @Autowired
+    private WebClient webClient;
+
+    // CREATE
+    public Mono<Product> createProduct(Product product) {
+        return webClient.post()
+                .uri("/products")
+                .bodyValue(product)
+                .retrieve()
+                .bodyToMono(Product.class);
+    }
+
+    // READ ALL
+    public Flux<Product> getAllProducts() {
+        return webClient.get()
+                .uri("/products")
+                .retrieve()
+                .bodyToFlux(Product.class);
+    }
+
+    // READ ONE
+    public Mono<Product> getProductById(String id) {
+        return webClient.get()
+                .uri("/products/{id}", id)
+                .retrieve()
+                .bodyToMono(Product.class);
+    }
+
+    // UPDATE
+    public Mono<Product> updateProduct(String id, Product product) {
+        return webClient.put()
+                .uri("/products/{id}", id)
+                .bodyValue(product)
+                .retrieve()
+                .bodyToMono(Product.class);
+    }
+
+    // DELETE
+    public Mono<Void> deleteProduct(String id) {
+        return webClient.delete()
+                .uri("/products/{id}", id)
+                .retrieve()
+                .bodyToMono(Void.class);
+    }
+}
+
+
+// webclient with error handling
+
+public Mono<User> getUser(String id) {
+    return webClient.get()
+            .uri("/users/{id}", id)
+            .exchangeToMono(response -> {
+
+                if (response.statusCode().is2xxSuccessful()) {
+                    return response.bodyToMono(User.class);
+                }
+
+                if (response.statusCode().is4xxClientError()) {
+                    return response.bodyToMono(String.class)
+                            .flatMap(error -> Mono.error(new RuntimeException("4xx error: " + error)));
+                }
+
+                if (response.statusCode().is5xxServerError()) {
+                    return response.bodyToMono(String.class)
+                            .flatMap(error -> Mono.error(new RuntimeException("5xx error: " + error)));
+                }
+
+                return Mono.error(new RuntimeException("Unexpected status"));
+            });
+}
+
+
+// Retry  with backoff
+
+public Mono<User> getUser(String id) {
+    return webClient.get()
+            .uri("/users/{id}", id)
+            .retrieve()
+            .bodyToMono(User.class)
+            .retryWhen(
+                Retry.backoff(3, Duration.ofSeconds(2))
+                     .filter(ex -> ex instanceof TimeoutException
+                                || ex instanceof IOException)
+                     .onRetryExhaustedThrow((retryBackoffSpec, signal) ->
+                        new RuntimeException("Max retries reached"))
+            );
+}
+
+
+//Timeout Handling
+
+public Mono<User> getUser(String id) {
+    return webClient.get()
+            .uri("/users/{id}", id)
+            .retrieve()
+            .bodyToMono(User.class)
+            .timeout(Duration.ofSeconds(3))
+            .onErrorResume(TimeoutException.class,
+                    ex -> Mono.error(new RuntimeException("External API timeout")));
+}
+
+// Fallback error handling
+public Mono<User> getUser(String id) {
+    return webClient.get()
+            .uri("/users/{id}", id)
+            .retrieve()
+            .bodyToMono(User.class)
+            .onErrorResume(error -> {
+                System.out.println("External API failed: " + error.getMessage());
+                return Mono.just(new User("default", "N/A")); // fallback response
+            });
+}
+
+// logging in webclient
+public Mono<User> getUser(String id) {
+    return webClient.get()
+            .uri("/users/{id}", id)
+            .exchangeToMono(response -> {
+                if (response.statusCode().is2xxSuccessful()) {
+                    return response.bodyToMono(User.class);
+                }
+
+                return response.bodyToMono(String.class)
+                        .flatMap(body -> {
+                            log.error("Error from API: status={}, body={}",
+                                      response.statusCode(), body);
+
+                            return Mono.error(new RuntimeException("API Error"));
+                        });
+            });
+}
+
