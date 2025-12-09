@@ -1,0 +1,111 @@
+@Service
+public class ProductService {
+
+    @Autowired
+    private ProductRepository repository;
+
+    public Flux<Product> getAll() {
+        return repository.findAll();
+    }
+
+    public Mono<Product> getById(String id) {
+        return repository.findById(id)
+                .switchIfEmpty(Mono.error(new ResourceNotFoundException("Product not found: " + id)));
+    }
+
+    public Mono<Product> create(Product product) {
+        if (product.getPrice() == null || product.getPrice() <= 0) {
+            return Mono.error(new BadRequestException("Price must be greater than 0"));
+        }
+        return repository.save(product);
+    }
+
+    public Mono<Product> update(String id, Product product) {
+        return getById(id)
+                .flatMap(existing -> {
+                    existing.setName(product.getName());
+                    existing.setPrice(product.getPrice());
+                    return repository.save(existing);
+                });
+    }
+
+    public Mono<Void> delete(String id) {
+        return getById(id)
+                .flatMap(existing -> repository.delete(existing));
+    }
+}
+
+
+@RestController
+@RequestMapping("/products")
+public class ProductController {
+
+    @Autowired
+    private ProductService service;
+
+    @GetMapping
+    public Flux<Product> getAll() {
+        return service.getAll();
+    }
+
+    @GetMapping("/{id}")
+    public Mono<Product> getById(@PathVariable String id) {
+        return service.getById(id);
+    }
+
+    @PostMapping
+    public Mono<Product> create(@RequestBody Product product) {
+        return service.create(product);
+    }
+
+    @PutMapping("/{id}")
+    public Mono<Product> update(@PathVariable String id, @RequestBody Product product) {
+        return service.update(id, product);
+    }
+
+    @DeleteMapping("/{id}")
+    public Mono<Void> delete(@PathVariable String id) {
+        return service.delete(id);
+    }
+}
+
+
+// Controller Advice
+
+  @RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(NotFoundException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleNotFound(NotFoundException ex) {
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.NOT_FOUND.value(),
+                "NOT_FOUND",
+                ex.getMessage(),
+                Instant.now()
+        );
+        return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND).body(error));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleBadRequest(IllegalArgumentException ex) {
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                "BAD_REQUEST",
+                ex.getMessage(),
+                Instant.now()
+        );
+        return Mono.just(ResponseEntity.badRequest().body(error));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleGeneric(Exception ex) {
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                "SERVER_ERROR",
+                ex.getMessage(),
+                Instant.now()
+        );
+        return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error));
+    }
+}
+
