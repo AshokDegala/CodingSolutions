@@ -1,0 +1,49 @@
+import java.util.Date;
+
+public final class Employee {
+
+    private final String name;
+    private final Date joiningDate; // <-- Mutable type
+
+    public Employee(String name, Date joiningDate) {
+        this.name = name;
+        // Deep copy (defensive copy)
+        this.joiningDate = new Date(joiningDate.getTime());
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public Date getJoiningDate() {
+        // Return a new Date object (copy)
+        return new Date(joiningDate.getTime());
+    }
+}
+
+
+
+// mutable list
+
+import java.util.*;
+
+public final class Student {
+
+    private final String name;
+    private final List<String> subjects; // mutable list
+
+    public Student(String name, List<String> subjects) {
+        this.name = name;
+        // Defensive copy
+        this.subjects = new ArrayList<>(subjects);
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public List<String> getSubjects() {
+        // Return a copy
+        return new ArrayList<>(subjects);
+    }
+}
