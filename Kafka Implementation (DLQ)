@@ -1,0 +1,77 @@
+@Configuration
+@EnableKafka
+public class KafkaConfig {
+
+    // Producer Config --------------------------------------------------
+    @Bean
+    public ProducerFactory<String, String> producerFactory() {
+        Map<String, Object> config = new HashMap<>();
+        config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        config.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        return new DefaultKafkaProducerFactory<>(config);
+    }
+
+    @Bean
+    public KafkaTemplate<String, String> kafkaTemplate() {
+        return new KafkaTemplate<>(producerFactory());
+    }
+
+
+    // Consumer Config --------------------------------------------------
+    @Bean
+    public ConsumerFactory<String, String> consumerFactory() {
+        Map<String, Object> config = new HashMap<>();
+        config.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        config.put(ConsumerConfig.GROUP_ID_CONFIG, "my-group");
+        config.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        config.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        config.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        return new DefaultKafkaConsumerFactory<>(config);
+    }
+
+
+    // Retry + DLQ Handler ----------------------------------------------
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory() {
+
+        var factory = new ConcurrentKafkaListenerContainerFactory<String, String>();
+        factory.setConsumerFactory(consumerFactory());
+
+        // Retry 3 times with 2 seconds backoff
+        factory.setCommonErrorHandler(new DefaultErrorHandler(
+                new DeadLetterPublishingRecoverer(kafkaTemplate()),
+                new FixedBackOff(2000L, 3) // retry every 2s, 3 retries
+        ));
+
+        return factory;
+    }
+}
+
+// kafka producer
+@Service
+public class KafkaProducerService {
+
+    @Autowired
+    private KafkaTemplate<String, String> kafkaTemplate;
+
+    public void sendMessage(String message) {
+        kafkaTemplate.send("orders-topic", message);
+        System.out.println("Published message: " + message);
+    }
+}
+
+
+// Kafka consumer
+@Service
+public class KafkaConsumerService {
+
+    @KafkaListener(topics = "orders-topic", groupId = "my-group")
+    public void consume(String message) {
+        System.out.println("Received message: " + message);
+
+        if(message.contains("error")) {
+            throw new RuntimeException("Failed processing message!");
+        }
+    }
+}
