@@ -1,0 +1,20 @@
+//Delete duplicates rows in SQl
+
+WITH CTE AS (
+    SELECT EmployeeID, Name, Department,
+           ROW_NUMBER() OVER (PARTITION BY Name, Department ORDER BY EmployeeID) AS RowNum
+    FROM Employees
+)
+DELETE FROM Employees
+WHERE EmployeeID IN (SELECT EmployeeID FROM CTE WHERE RowNum > 1);
+
+// second highest salary
+
+SELECT salary
+FROM Employee
+ORDER BY salary DESC
+LIMIT 1 OFFSET 1;
+
+SELECT MAX(salary) AS SecondHighestSalary
+FROM Employee
+WHERE salary < (SELECT MAX(salary) FROM Employee);
