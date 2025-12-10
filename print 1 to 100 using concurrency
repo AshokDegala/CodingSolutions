@@ -1,0 +1,71 @@
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class PrintNumbersExecutor {
+    public static void main(String[] args) {
+        ExecutorService executor = Executors.newFixedThreadPool(10); // 10 threads
+
+        for (int i = 1; i <= 100; i++) {
+            final int num = i;
+            executor.submit(() -> {
+                System.out.println(Thread.currentThread().getName() + " -> " + num);
+            });
+        }
+
+        executor.shutdown();
+    }
+}
+
+
+// Using wait and notify
+
+public class PrintNumbers {
+    private static int counter = 1;
+    private final Object lock = new Object(); // Object to synchronize on
+
+    public void printEven() {
+        synchronized (lock) {
+            while (counter <= 100) {
+                if (counter % 2 == 0) {
+                    System.out.println("Even Thread: " + counter);
+                    counter++;
+                    lock.notify(); // Notify the waiting thread
+                } else {
+                    try {
+                        lock.wait(); // Wait for the other thread
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }
+        }
+    }
+
+    public void printOdd() {
+        synchronized (lock) {
+            while (counter <= 100) {
+                if (counter % 2 != 0) {
+                    System.out.println("Odd Thread: " + counter);
+                    counter++;
+                    lock.notify(); // Notify the waiting thread
+                } else {
+                    try {
+                        lock.wait(); // Wait for the other thread
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        PrintNumbers printer = new PrintNumbers();
+
+        Thread oddThread = new Thread(() -> printer.printOdd());
+        Thread evenThread = new Thread(() -> printer.printEven());
+
+        oddThread.start();
+        evenThread.start();
+    }
+}
